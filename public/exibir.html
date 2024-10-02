@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="exibir.css"> <!-- Link para o CSS separado -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <title>Exibir Dados</title>
+    <style>
+        /* Estilos separados em exibir.css */
+        .loading-icon {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+        }
+
+        .status-icon {
+            margin-right: 5px;
+        }
+
+        .notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+            width: 300px;
+            text-align: center;
+        }
+
+        .notification.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .notification.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .no-users {
+            color: #888;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-users"></i> Usuários Pendentes</h1>
+        
+        <h2><span class="loading-icon"></span>Aguardando</h2>
+        <div id="pendingMessage" class="no-users"></div>
+        <ul id="pendingList"></ul>
+        
+        <h2><i class="fas fa-check-circle" style="color: green;"></i> Aprovados</h2>
+        <ul id="approvedList"></ul>
+
+        <h2><i class="fas fa-times-circle" style="color: red;"></i> Reprovados</h2>
+        <ul id="rejectedList"></ul>
+
+        <div id="errorMessage" style="color: red;"></div>
+        <div id="successMessage" class="notification success"></div>
+        <div id="errorUpdateMessage" class="notification error"></div>
+    </div>
+
+    <script>
+        async function loadUsers() {
+            const pendingList = document.getElementById('pendingList');
+            const approvedList = document.getElementById('approvedList');
+            const rejectedList = document.getElementById('rejectedList');
+            const pendingMessage = document.getElementById('pendingMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            pendingList.innerHTML = ''; // Limpa a lista de pendentes
+            approvedList.innerHTML = ''; // Limpa a lista de aprovados
+            rejectedList.innerHTML = ''; // Limpa a lista de reprovados
+
+            try {
+                const response = await fetch('/api/dados'); // Verifique se a rota está correta
+
+                if (!response.ok) {
+                    throw new Error(`Erro ao buscar os dados: ${response.status}`);
+                }
+
+                const users = await response.json();
+
+                if (users.length === 0) {
+                    pendingMessage.textContent = 'Nenhum usuário no momento, volte mais tarde.';
+                    return;
+                }
+
+                // Organizando usuários por status
+                users.forEach(user => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-user"></i></span><strong>Nome:</strong> ${user.Nome}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-envelope"></i></span><strong>Email:</strong> ${user.Email}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-calendar-alt"></i></span><strong>Idade:</strong> ${user.Idade}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-phone"></i></span><strong>Número:</strong> ${user.Número}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-desktop"></i></span><strong>IP:</strong> ${user.IP || 'Não disponível'}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-users-cog"></i></span><strong>Grupo:</strong> ${user.Grupo}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-comment-dots"></i></span><strong>Motivo:</strong> ${user.Motivo}
+                        </div>
+                        <div class="user-info">
+                            <span class="icon"><i class="fas fa-question-circle"></i></span><strong>Motivo para ser admin:</strong> ${user.MotivoAdmin || 'Não disponível'}
+                        </div>
+                    `;
+
+                    // Adicionando o botão de aprovar/rejeitar apenas para usuários em "Aguardando"
+                    if (user.Status === 'Aguarde') {
+                        li.innerHTML += `
+                            <div class="status">
+                                <span class="loading-icon"></span>
+                                <strong>Status:</strong> ${user.Status}
+                            </div>
+                            <button class="approve-btn" onclick="updateStatus('${user.Nome}', 'Aprovado')">Aprovar</button>
+                            <button class="reject-btn" onclick="updateStatus('${user.Nome}', 'Reprovado')">Rejeitar</button>
+                        `;
+                        pendingList.appendChild(li);
+                    } else if (user.Status === 'Aprovado') {
+                        li.innerHTML += `
+                            <div class="status">
+                                <span class="status-icon"><i class="fas fa-check-circle" style="color: green;"></i></span>
+                                <strong>Status:</strong> ${user.Status}
+                            </div>`;
+                        approvedList.appendChild(li);
+                    } else if (user.Status === 'Reprovado') {
+                        li.innerHTML += `
+                            <div class="status">
+                                <span class="status-icon"><i class="fas fa-times-circle" style="color: red;"></i></span>
+                                <strong>Status:</strong> ${user.Status}
+                            </div>`;
+                        rejectedList.appendChild(li);
+                    }
+                });
+
+                // Mensagem para usuários em espera
+                if (pendingList.children.length === 0) {
+                    pendingMessage.textContent = 'Nenhum usuário no momento, volte mais tarde.';
+                } else {
+                    pendingMessage.textContent = ''; // Limpa a mensagem se houver usuários
+                }
+
+            } catch (error) {
+                errorMessage.textContent = error.message;
+            }
+        }
+
+        async function updateStatus(nome, novoStatus) {
+            const successMessage = document.getElementById('successMessage');
+            const errorUpdateMessage = document.getElementById('errorUpdateMessage');
+
+            try {
+                const response = await fetch('/api/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ nome, status: novoStatus }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erro ao atualizar o status: ${response.status}`);
+                }
+
+                successMessage.style.display = 'none';
+                errorUpdateMessage.style.display = 'none';
+                successMessage.textContent = `Status de "${nome}" atualizado para "${novoStatus}" com sucesso!`;
+                successMessage.style.display = 'block'; // Mostrar a mensagem de sucesso
+
+                // Recarregar usuários após a atualização
+                loadUsers();
+
+                // Animar a mensagem de sucesso
+                setTimeout(() => {
+                    successMessage.style.display = 'none';
+                }, 3000); // Oculta após 3 segundos
+
+            } catch (error) {
+                errorUpdateMessage.textContent = error.message;
+                errorUpdateMessage.style.display = 'block'; // Mostrar mensagem de erro
+
+                // Animar a mensagem de erro
+                setTimeout(() => {
+                    errorUpdateMessage.style.display = 'none';
+                }, 3000); // Oculta após 3 segundos
+            }
+        }
+
+        // Carregar usuários ao iniciar a página
+        loadUsers();
+    </script>
+</body>
+</html>
